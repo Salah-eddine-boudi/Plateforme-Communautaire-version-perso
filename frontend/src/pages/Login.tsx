@@ -3,9 +3,11 @@ import axios from 'axios';
 import { Container, TextField, Button, Typography, Box, Paper, Alert, Link as MuiLink, Avatar } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
     const navigate = useNavigate();
+    const { login } = useAuth();
     const [formData, setFormData] = useState({
         email: '',
         password: ''
@@ -30,10 +32,7 @@ export default function Login() {
             // 2. Récupérer le token
             const { access_token } = response.data;
 
-            // 3. Sauvegarder le token
-            localStorage.setItem('access_token', access_token);
-
-            // 4. Récupérer les infos de l'utilisateur
+            // 3. Récupérer les infos de l'utilisateur
             const config = {
                 headers: { Authorization: `Bearer ${access_token}` }
             };
@@ -41,10 +40,10 @@ export default function Login() {
             const profileResponse = await axios.get('http://localhost:3000/auth/profile', config);
             const user = profileResponse.data;
 
-            // 5. Sauvegarder l'utilisateur pour l'UI
-            localStorage.setItem('user', JSON.stringify(user));
+            // 4. Utiliser le contexte pour se connecter (met à jour le state global)
+            login(access_token, user);
 
-            // 6. Redirection vers l'accueil
+            // 5. Redirection vers l'accueil
             alert(`Ravi de vous revoir, ${user.firstName} !`);
             navigate('/');
 

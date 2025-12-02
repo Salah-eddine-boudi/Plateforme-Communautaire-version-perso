@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Link, useNavigate } from 'react-router-dom';
 import {
   Container,
   Card,
@@ -9,8 +8,6 @@ import {
   CardActions,
   Typography,
   Chip,
-  AppBar,
-  Toolbar,
   Button,
   TextField,
   Box,
@@ -23,14 +20,8 @@ import {
   Select,
   FormControl,
   InputLabel,
-  Avatar,
-  Menu,
-  Tooltip,
-  IconButton,
-  Divider,
-  ListItemIcon
 } from '@mui/material';
-import { Logout, Person, Settings } from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext';
 
 // Interface des données
 interface MarketplaceItem {
@@ -46,15 +37,8 @@ interface MarketplaceItem {
   };
 }
 
-interface User {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-}
-
 function Home() {
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [annonces, setAnnonces] = useState<MarketplaceItem[]>([]);
   const [recherche, setRecherche] = useState("");
   const [openDialog, setOpenDialog] = useState(false);
@@ -67,12 +51,8 @@ function Home() {
     imageUrl: '',
   });
 
-  // État pour le menu utilisateur
-  const [anchorElUser, setAnchorElUser] = useState<null | HTMLElement>(null);
-
   // États pour la création
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [newAnnouncement, setNewAnnouncement] = useState({
     title: '',
     description: '',
@@ -97,37 +77,7 @@ function Home() {
   // Chargement des données au démarrage
   useEffect(() => {
     loadAnnonces();
-
-    // Lire l'identité de l'utilisateur depuis le localStorage
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        setCurrentUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Erreur lecture user localStorage", e);
-        localStorage.removeItem('user');
-      }
-    }
   }, []);
-
-  // Gestion du Menu Utilisateur
-  const handleOpenUserMenu = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorElUser(event.currentTarget);
-  };
-
-  const handleCloseUserMenu = () => {
-    setAnchorElUser(null);
-  };
-
-  // Déconnexion
-  const handleLogout = () => {
-    handleCloseUserMenu();
-    localStorage.removeItem('user');
-    localStorage.removeItem('access_token');
-    setCurrentUser(null);
-    alert("Vous avez été déconnecté.");
-    navigate('/');
-  };
 
   // Ouvrir la modal de modification
   const handleOpenEditDialog = (annonce: MarketplaceItem) => {
@@ -213,7 +163,7 @@ function Home() {
   };
 
   const handleCreateAnnouncement = async () => {
-    if (!currentUser) {
+    if (!user) {
       alert("Vous devez être connecté pour publier.");
       return;
     }
@@ -225,7 +175,7 @@ function Home() {
         price: newAnnouncement.price,
         category: newAnnouncement.category,
         imageUrl: newAnnouncement.imageUrl || undefined,
-        user: { id: currentUser.id }
+        user: { id: user.id }
       });
 
       alert("Annonce créée avec succès !");
@@ -245,110 +195,12 @@ function Home() {
     )
     : [];
 
-  // Helper pour les initiales
-  const getInitials = (firstName?: string, lastName?: string) => {
-    const first = firstName ? firstName.charAt(0) : '';
-    const last = lastName ? lastName.charAt(0) : '';
-    return `${first}${last}`.toUpperCase() || '?';
-  };
+
 
   return (
     <Box sx={{ flexGrow: 1, minHeight: '100vh', bgcolor: '#f5f5f5' }}>
 
-      {/* 1. BARRE DE NAVIGATION */}
-      <AppBar position="static" sx={{ bgcolor: '#1976d2' }}>
-        <Toolbar sx={{ px: { xs: 2, sm: 3 } }}>
-          <Typography
-            variant="h6"
-            component={Link}
-            to="/"
-            sx={{
-              mr: 2,
-              fontWeight: 'bold',
-              fontSize: { xs: '1rem', sm: '1.25rem' },
-              color: 'inherit',
-              textDecoration: 'none',
-            }}
-          >
-            JUNIA COMMUNITY
-          </Typography>
-
-          <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' }, gap: 2 }}>
-            <Button sx={{ color: 'white', display: 'block' }} component={Link} to="/">
-              Accueil
-            </Button>
-            <Button sx={{ color: 'white', display: 'block' }} onClick={() => alert('Bientôt disponible !')}>
-              Ressources
-            </Button>
-            <Button sx={{ color: 'white', display: 'block' }} onClick={() => alert('Bientôt disponible !')}>
-              Événements
-            </Button>
-          </Box>
-
-          {currentUser ? (
-            <Box sx={{ flexGrow: 0 }}>
-              <Tooltip title="Ouvrir les paramètres">
-                <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
-                  <Avatar sx={{ bgcolor: 'orange' }}>
-                    {getInitials(currentUser.firstName, currentUser.lastName)}
-                  </Avatar>
-                </IconButton>
-              </Tooltip>
-              <Menu
-                sx={{ mt: '45px' }}
-                id="menu-appbar"
-                anchorEl={anchorElUser}
-                anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-                keepMounted
-                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                open={Boolean(anchorElUser)}
-                onClose={handleCloseUserMenu}
-              >
-                <Box sx={{ px: 2, py: 1 }}>
-                  <Typography variant="subtitle1" fontWeight="bold">
-                    {currentUser.firstName} {currentUser.lastName}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" noWrap>
-                    {currentUser.email}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                    Membre
-                  </Typography>
-                </Box>
-                <Divider />
-                <MenuItem onClick={handleCloseUserMenu}>
-                  <ListItemIcon>
-                    <Person fontSize="small" />
-                  </ListItemIcon>
-                  Mon Profil
-                </MenuItem>
-                <MenuItem onClick={handleCloseUserMenu}>
-                  <ListItemIcon>
-                    <Settings fontSize="small" />
-                  </ListItemIcon>
-                  Paramètres
-                </MenuItem>
-                <Divider />
-                <MenuItem onClick={handleLogout}>
-                  <ListItemIcon>
-                    <Logout fontSize="small" />
-                  </ListItemIcon>
-                  Se déconnecter
-                </MenuItem>
-              </Menu>
-            </Box>
-          ) : (
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button color="inherit" component={Link} to="/login">
-                Se connecter
-              </Button>
-              <Button variant="contained" color="secondary" component={Link} to="/register">
-                S'inscrire
-              </Button>
-            </Box>
-          )}
-        </Toolbar>
-      </AppBar>
+      {/* 1. BARRE DE NAVIGATION (Supprimée car déplacée dans Navbar.tsx) */}
 
       {/* 2. SECTION HÉROS */}
       <Box sx={{
@@ -392,7 +244,7 @@ function Home() {
             }}
           />
 
-          {currentUser && (
+          {user && (
             <Box sx={{ mt: 4 }}>
               <Button
                 variant="contained"
