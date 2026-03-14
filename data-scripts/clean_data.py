@@ -5,7 +5,7 @@ import time
 API_URL = "http://localhost:3000/marketplace"
 
 # ⚠️ LE MÊME ID QUE CELUI UTILISÉ POUR L'IMPORT (C'est lui qu'on va nettoyer)
-USER_ID = "a7fc9702-9b01-4961-a3e3-f516dd0ab0ca"
+USER_ID = "c9b26fca-356f-4601-89b5-3ba8e1cdafc9"
 
 def cleanup_script():
     print("🧹 Démarrage du nettoyage...")

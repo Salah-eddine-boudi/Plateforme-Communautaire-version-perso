@@ -1,29 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import {
-  Container,
-  Card,
-  CardContent,
-  CardMedia,
-  CardActions,
-  Typography,
-  Chip,
-  Button,
-  TextField,
-  Box,
-  Paper,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
+  Container, Card, CardContent, CardMedia, CardActions,
+  Typography, Chip, Button, TextField, Box, Dialog,
+  DialogTitle, DialogContent, DialogActions, MenuItem,
+  Select, FormControl, InputLabel, Snackbar, Alert,
+  IconButton, Stack, Divider, CircularProgress, Paper, Tooltip,
 } from '@mui/material';
+import {
+  Search as SearchIcon,
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Visibility as VisibilityIcon,
+  ShoppingBag as ShoppingBagIcon,
+} from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
-// Interface des données
 interface MarketplaceItem {
   id: string;
   title: string;
@@ -32,625 +25,415 @@ interface MarketplaceItem {
   category: string;
   imageUrl?: string;
   user: {
-    firstName: string;
-    lastName: string;
+    id?: string;
+    firstName?: string;
+    lastName?: string;
   };
 }
 
-function Home() {
+const FORM_DEFAULTS = { title: '', description: '', price: 0, category: '', imageUrl: '' };
+
+function ItemForm({ data, onChange }: { data: typeof FORM_DEFAULTS; onChange: (k: string, v: string | number) => void }) {
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+      <TextField
+        label="Titre du produit"
+        fullWidth
+        value={data.title}
+        onChange={e => onChange('title', e.target.value)}
+        required
+      />
+      <TextField
+        label="Description"
+        fullWidth
+        multiline
+        rows={3}
+        value={data.description}
+        onChange={e => onChange('description', e.target.value)}
+        required
+      />
+      <Box sx={{ display: 'flex', gap: 2 }}>
+        <TextField
+          label="Prix (€)"
+          type="number"
+          fullWidth
+          value={data.price}
+          onChange={e => onChange('price', parseFloat(e.target.value) || 0)}
+          inputProps={{ min: 0, step: 0.01 }}
+        />
+        <TextField
+          label="Catégorie"
+          fullWidth
+          value={data.category}
+          onChange={e => onChange('category', e.target.value)}
+          required
+        />
+      </Box>
+      <TextField
+        label="URL de l'image (optionnel)"
+        fullWidth
+        value={data.imageUrl}
+        onChange={e => onChange('imageUrl', e.target.value)}
+        placeholder="https://..."
+      />
+    </Box>
+  );
+}
+
+export default function Home() {
   const { user } = useAuth();
-  const [annonces, setAnnonces] = useState<MarketplaceItem[]>([]);
-  const [recherche, setRecherche] = useState("");
-  const [openDialog, setOpenDialog] = useState(false);
-  const [annonceToEdit, setAnnonceToEdit] = useState<MarketplaceItem | null>(null);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    price: 0,
-    category: '',
-    imageUrl: '',
-  });
+  const [items, setItems] = useState<MarketplaceItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState('Tous');
+  const [sortOrder, setSortOrder] = useState('');
 
-  // États pour la création
-  const [openCreateDialog, setOpenCreateDialog] = useState(false);
-  const [newAnnouncement, setNewAnnouncement] = useState({
-    title: '',
-    description: '',
-    price: 0,
-    category: '',
-    imageUrl: '',
-  });
+  // Dialogs state
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
+  const [form, setForm] = useState(FORM_DEFAULTS);
 
-  // Fonction pour charger les annonces
-  const loadAnnonces = () => {
-    axios.get('http://localhost:3000/marketplace')
-      .then((response) => {
-        const data = Array.isArray(response.data) ? response.data : [];
-        setAnnonces(data);
-      })
-      .catch((error) => {
-        console.error("Erreur API:", error);
-        setAnnonces([]);
-      });
-  };
+  // Snackbar
+  const [snack, setSnack] = useState({ open: false, msg: '', severity: 'success' as 'success' | 'error' });
+  const notify = (msg: string, severity: 'success' | 'error' = 'success') =>
+    setSnack({ open: true, msg, severity });
 
-  // Chargement des données au démarrage
-  useEffect(() => {
-    loadAnnonces();
-  }, []);
-
-  // Ouvrir la modal de modification
-  const handleOpenEditDialog = (annonce: MarketplaceItem) => {
-    setAnnonceToEdit(annonce);
-    setFormData({
-      title: annonce.title,
-      description: annonce.description,
-      price: annonce.price,
-      category: annonce.category,
-      imageUrl: annonce.imageUrl || '',
-    });
-    setOpenDialog(true);
-  };
-
-  // Fermer la modal
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setAnnonceToEdit(null);
-    setFormData({
-      title: '',
-      description: '',
-      price: 0,
-      category: '',
-      imageUrl: '',
-    });
-  };
-
-  // Gérer la soumission du formulaire de modification
-  const handleUpdateAnnonce = async () => {
-    if (!annonceToEdit) return;
-
+  const loadItems = async () => {
+    setLoading(true);
     try {
-      await axios.patch(`http://localhost:3000/marketplace/${annonceToEdit.id}`, {
-        title: formData.title,
-        description: formData.description,
-        price: formData.price,
-        category: formData.category,
-        imageUrl: formData.imageUrl || undefined,
-      });
-
-      loadAnnonces();
-      handleCloseDialog();
-      alert('Annonce modifiée avec succès !');
-    } catch (error) {
-      console.error("Erreur lors de la modification:", error);
-      alert('Erreur lors de la modification de l\'annonce');
+      const res = await axios.get('http://localhost:3000/marketplace');
+      setItems(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      notify('Erreur lors du chargement des annonces', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Gérer la suppression d'une annonce
-  const handleDeleteAnnonce = async (annonce: MarketplaceItem) => {
-    const confirmDelete = window.confirm(
-      `Êtes-vous sûr de vouloir supprimer l'annonce "${annonce.title}" ?\n\nCette action est irréversible.`
+  useEffect(() => { loadItems(); }, []);
+
+  // Unique categories from data
+  const categories = useMemo(() => {
+    const cats = [...new Set(items.map(i => i.category))].filter(Boolean).sort();
+    return ['Tous', ...cats];
+  }, [items]);
+
+  // Filtered + sorted items
+  const filtered = useMemo(() => {
+    let result = items;
+    if (activeCategory !== 'Tous') result = result.filter(i => i.category === activeCategory);
+    if (search) result = result.filter(i =>
+      i.title?.toLowerCase().includes(search.toLowerCase()) ||
+      i.category?.toLowerCase().includes(search.toLowerCase())
     );
+    if (sortOrder === 'asc') result = [...result].sort((a, b) => Number(a.price) - Number(b.price));
+    if (sortOrder === 'desc') result = [...result].sort((a, b) => Number(b.price) - Number(a.price));
+    return result;
+  }, [items, activeCategory, search, sortOrder]);
 
-    if (!confirmDelete) return;
-
+  // CRUD
+  const handleCreate = async () => {
+    if (!user) return notify('Connectez-vous pour publier', 'error');
     try {
-      await axios.delete(`http://localhost:3000/marketplace/${annonce.id}`);
-      loadAnnonces();
-      alert('Annonce supprimée avec succès !');
-    } catch (error) {
-      console.error("Erreur lors de la suppression:", error);
-      alert('Erreur lors de la suppression de l\'annonce');
+      await axios.post('http://localhost:3000/marketplace', { ...form, user: { id: user.id } });
+      notify('Annonce publiée avec succès !');
+      setCreateOpen(false);
+      setForm(FORM_DEFAULTS);
+      loadItems();
+    } catch {
+      notify('Erreur lors de la création', 'error');
     }
   };
 
-  // --- GESTION DE LA CRÉATION ---
-
-  const handleOpenCreateDialog = () => {
-    setOpenCreateDialog(true);
-  };
-
-  const handleCloseCreateDialog = () => {
-    setOpenCreateDialog(false);
-    setNewAnnouncement({
-      title: '',
-      description: '',
-      price: 0,
-      category: '',
-      imageUrl: '',
-    });
-  };
-
-  const handleCreateAnnouncement = async () => {
-    if (!user) {
-      alert("Vous devez être connecté pour publier.");
-      return;
-    }
-
+  const handleUpdate = async () => {
+    if (!selectedItem) return;
     try {
-      await axios.post('http://localhost:3000/marketplace', {
-        title: newAnnouncement.title,
-        description: newAnnouncement.description,
-        price: newAnnouncement.price,
-        category: newAnnouncement.category,
-        imageUrl: newAnnouncement.imageUrl || undefined,
-        user: { id: user.id }
-      });
-
-      alert("Annonce créée avec succès !");
-      loadAnnonces();
-      handleCloseCreateDialog();
-    } catch (error) {
-      console.error("Erreur création:", error);
-      alert("Erreur lors de la création de l'annonce.");
+      await axios.patch(`http://localhost:3000/marketplace/${selectedItem.id}`, form);
+      notify('Annonce modifiée avec succès !');
+      setEditOpen(false);
+      loadItems();
+    } catch {
+      notify('Erreur lors de la modification', 'error');
     }
   };
 
-  // Filtre de recherche
-  const annoncesFiltrees = Array.isArray(annonces)
-    ? annonces.filter((annonce) =>
-      annonce.title?.toLowerCase().includes(recherche.toLowerCase()) ||
-      annonce.category?.toLowerCase().includes(recherche.toLowerCase())
-    )
-    : [];
+  const handleDelete = async () => {
+    if (!selectedItem) return;
+    try {
+      await axios.delete(`http://localhost:3000/marketplace/${selectedItem.id}`);
+      notify('Annonce supprimée');
+      setDeleteOpen(false);
+      loadItems();
+    } catch {
+      notify('Erreur lors de la suppression', 'error');
+    }
+  };
 
-
+  const openEdit = (item: MarketplaceItem) => {
+    setSelectedItem(item);
+    setForm({ title: item.title, description: item.description, price: item.price, category: item.category, imageUrl: item.imageUrl || '' });
+    setEditOpen(true);
+  };
 
   return (
-    <Box sx={{ flexGrow: 1, minHeight: '100vh', bgcolor: '#f5f5f5' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#f4f6f8' }}>
 
-      {/* 1. BARRE DE NAVIGATION (Supprimée car déplacée dans Navbar.tsx) */}
-
-      {/* 2. SECTION HÉROS */}
+      {/* ── HERO ── */}
       <Box sx={{
-        bgcolor: 'white',
-        pt: { xs: 4, sm: 6, md: 8 },
-        pb: { xs: 4, sm: 5, md: 6 },
-        mb: { xs: 2, sm: 3, md: 4 },
-        textAlign: 'center',
-        boxShadow: 1
+        background: 'linear-gradient(135deg, #0d47a1 0%, #1976d2 60%, #42a5f5 100%)',
+        pt: { xs: 6, md: 10 }, pb: { xs: 5, md: 8 },
+        textAlign: 'center', color: 'white',
       }}>
-        <Container maxWidth="md" sx={{ px: { xs: 2, sm: 3 } }}>
-          <Typography
-            component="h1"
-            variant="h2"
-            color="text.primary"
-            gutterBottom
-            sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}
-          >
-            Marketplace & Ressources
-          </Typography>
-          <Typography
-            variant="h5"
-            color="text.secondary"
-            paragraph
-            sx={{ fontSize: { xs: '1rem', sm: '1.25rem', md: '1.5rem' } }}
-          >
-            Échangez des compétences, partagez des ressources et collaborez
-            au sein de la communauté Santé & Bien-être.
+        <Container maxWidth="md">
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, mb: 2 }}>
+            <ShoppingBagIcon sx={{ fontSize: 40 }} />
+            <Typography variant="h3" fontWeight={800} sx={{ fontSize: { xs: '1.8rem', md: '2.5rem' } }}>
+              Marketplace Communautaire
+            </Typography>
+          </Box>
+          <Typography variant="h6" sx={{ opacity: 0.85, mb: 4, fontWeight: 400 }}>
+            Achetez, vendez et échangez des ressources au sein de la communauté Junia
           </Typography>
 
-          <TextField
-            variant="outlined"
-            placeholder="Rechercher (ex: Yoga, Matériel...)"
-            value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
-            sx={{
-              mt: 2,
-              width: '100%',
-              maxWidth: { xs: '100%', sm: '500px' },
-              bgcolor: 'white'
-            }}
-          />
+          {/* Search bar */}
+          <Paper sx={{ display: 'flex', alignItems: 'center', px: 2.5, py: 0.8, borderRadius: 4, maxWidth: 580, mx: 'auto', boxShadow: 4 }}>
+            <SearchIcon sx={{ color: 'text.disabled', mr: 1 }} />
+            <TextField
+              fullWidth variant="standard"
+              placeholder="Rechercher un produit, une catégorie..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              InputProps={{ disableUnderline: true, sx: { fontSize: '1rem' } }}
+            />
+          </Paper>
 
           {user && (
-            <Box sx={{ mt: 4 }}>
-              <Button
-                variant="contained"
-                size="large"
-                onClick={handleOpenCreateDialog}
-                sx={{ px: 4, py: 1.5, fontSize: '1.1rem' }}
-              >
-                + Publier une annonce
-              </Button>
-            </Box>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={<AddIcon />}
+              onClick={() => { setForm(FORM_DEFAULTS); setCreateOpen(true); }}
+              sx={{ mt: 3, bgcolor: 'white', color: '#1565c0', fontWeight: 700, borderRadius: 3, px: 4, '&:hover': { bgcolor: '#e3f2fd' } }}
+            >
+              Publier une annonce
+            </Button>
           )}
         </Container>
       </Box>
 
-      {/* 3. GRILLE DES RÉSULTATS */}
-      <Container
-        maxWidth="xl"
-        sx={{
-          pb: { xs: 4, sm: 6, md: 8 },
-          px: { xs: 2, sm: 3, md: 4 }
-        }}
-      >
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: '1fr',
-            sm: 'repeat(2, 1fr)',
-            md: 'repeat(3, 1fr)',
-            lg: 'repeat(4, 1fr)',
-            xl: 'repeat(5, 1fr)'
-          },
-          gap: { xs: 2, sm: 3, md: 4 }
-        }}>
-          {annoncesFiltrees.map((annonce) => (
-            <Card
-              key={annonce.id}
-              sx={{
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                transition: '0.3s',
-                boxShadow: 2,
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 6,
-                },
-                borderRadius: 2,
-                overflow: 'hidden'
-              }}
-            >
-              <Box
-                sx={{
-                  height: { xs: 180, sm: 200, md: 220 },
-                  width: '100%',
-                  backgroundColor: '#e0e0e0',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  position: 'relative',
-                }}
-              >
-                {annonce.imageUrl ? (
-                  <CardMedia
-                    component="img"
-                    height="140"
-                    image={annonce.imageUrl}
-                    alt={annonce.title}
-                    onError={(e) => {
-                      if (!(e.currentTarget as HTMLElement).dataset.errorHandled) {
-                        (e.currentTarget as HTMLElement).dataset.errorHandled = 'true';
-                        e.currentTarget.style.display = 'none';
-                      }
-                    }}
-                    sx={{
-                      objectFit: 'cover',
-                      width: '100%',
-                      height: '100%',
-                      transition: 'transform 0.3s',
-                      '&:hover': {
-                        transform: 'scale(1.1)'
-                      }
-                    }}
-                  />
-                ) : (
-                  <Typography
-                    variant="body1"
-                    sx={{
-                      color: '#666',
-                      fontWeight: 500,
-                      textAlign: 'center',
-                      px: 2
-                    }}
-                  >
-                    {annonce.category}
-                  </Typography>
-                )}
-              </Box>
+      {/* ── FILTERS + STATS ── */}
+      <Container maxWidth="xl" sx={{ pt: 4, pb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+          <Typography variant="body1" color="text.secondary">
+            <strong style={{ color: '#1976d2' }}>{filtered.length}</strong> produit{filtered.length !== 1 ? 's' : ''} disponible{filtered.length !== 1 ? 's' : ''}
+          </Typography>
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Trier par</InputLabel>
+            <Select value={sortOrder} label="Trier par" onChange={e => setSortOrder(e.target.value)}>
+              <MenuItem value="">Par défaut</MenuItem>
+              <MenuItem value="asc">Prix croissant</MenuItem>
+              <MenuItem value="desc">Prix décroissant</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
 
-              <CardContent sx={{ flexGrow: 1, px: { xs: 1.5, sm: 2 }, py: { xs: 1.5, sm: 2 } }}>
-                <Box
-                  display="flex"
-                  justifyContent="space-between"
-                  alignItems="center"
-                  mb={1.5}
-                  flexWrap="wrap"
-                  gap={1}
-                >
-                  <Chip
-                    label={annonce.category}
-                    color="primary"
-                    size="small"
-                    variant="outlined"
-                    sx={{ fontWeight: 500 }}
-                  />
-                  <Typography
-                    variant="h6"
-                    color="secondary"
-                    fontWeight="bold"
-                    sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}
-                  >
-                    {annonce.price === 0 ? "Gratuit" : `${annonce.price} €`}
-                  </Typography>
-                </Box>
-
-                <Typography
-                  gutterBottom
-                  variant="h5"
-                  component="h2"
-                  sx={{
-                    fontSize: { xs: '1.1rem', sm: '1.25rem' },
-                    fontWeight: 600,
-                    mb: 1,
-                    lineHeight: 1.3,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    minHeight: { xs: '2.6em', sm: '3em' }
-                  }}
-                >
-                  {annonce.title}
-                </Typography>
-                <Typography
-                  color="text.secondary"
-                  sx={{
-                    mb: 2,
-                    fontSize: { xs: '0.875rem', sm: '0.9375rem' },
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    lineHeight: 1.5,
-                    minHeight: { xs: '3.9em', sm: '4.5em' }
-                  }}
-                >
-                  {annonce.description}
-                </Typography>
-              </CardContent>
-
-              <CardActions
-                sx={{
-                  bgcolor: '#fafafa',
-                  px: { xs: 1, sm: 2 },
-                  py: { xs: 1, sm: 1.5 },
-                  flexDirection: { xs: 'column', sm: 'row' },
-                  alignItems: { xs: 'stretch', sm: 'center' },
-                  gap: { xs: 1, sm: 0 }
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{
-                    fontStyle: 'italic',
-                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                    mb: { xs: 0.5, sm: 0 },
-                    textAlign: { xs: 'center', sm: 'left' },
-                    flexGrow: 1
-                  }}
-                >
-                  Proposé par {annonce.user?.firstName} {annonce.user?.lastName}
-                </Typography>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    gap: { xs: 0.5, sm: 1 },
-                    flexWrap: 'wrap',
-                    justifyContent: { xs: 'center', sm: 'flex-end' },
-                    width: { xs: '100%', sm: 'auto' }
-                  }}
-                >
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="primary"
-                    onClick={() => handleOpenEditDialog(annonce)}
-                    sx={{
-                      fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                      px: { xs: 1, sm: 2 },
-                      minWidth: { xs: '70px', sm: 'auto' }
-                    }}
-                  >
-                    Modifier
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    onClick={() => handleDeleteAnnonce(annonce)}
-                    sx={{
-                      fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                      px: { xs: 1, sm: 2 },
-                      minWidth: { xs: '70px', sm: 'auto' }
-                    }}
-                  >
-                    Supprimer
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="contained"
-                    sx={{
-                      fontSize: { xs: '0.7rem', sm: '0.875rem' },
-                      px: { xs: 1, sm: 2 },
-                      minWidth: { xs: '70px', sm: 'auto' }
-                    }}
-                  >
-                    Voir l'offre
-                  </Button>
-                </Box>
-              </CardActions>
-            </Card>
+        {/* Category chips */}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }}>
+          {categories.map(cat => (
+            <Chip
+              key={cat}
+              label={cat}
+              onClick={() => setActiveCategory(cat)}
+              color={activeCategory === cat ? 'primary' : 'default'}
+              variant={activeCategory === cat ? 'filled' : 'outlined'}
+              sx={{ cursor: 'pointer', textTransform: 'capitalize', fontWeight: activeCategory === cat ? 600 : 400 }}
+            />
           ))}
         </Box>
 
-        {annoncesFiltrees.length === 0 && (
-          <Paper
-            sx={{
-              p: { xs: 3, sm: 4 },
-              textAlign: 'center',
-              mt: { xs: 2, sm: 4 },
-              borderRadius: 2,
-              boxShadow: 2
-            }}
-          >
-            <Typography
-              variant="h6"
-              color="text.secondary"
-              sx={{
-                fontSize: { xs: '1rem', sm: '1.25rem' }
-              }}
-            >
-              {recherche
-                ? `Aucun résultat trouvé pour "${recherche}" 🧐`
-                : 'Aucune annonce disponible pour le moment'
-              }
+        {/* ── GRID ── */}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+            <CircularProgress size={48} />
+          </Box>
+        ) : filtered.length === 0 ? (
+          <Paper sx={{ p: 6, textAlign: 'center', borderRadius: 3 }}>
+            <Typography variant="h6" color="text.secondary">
+              {search ? `Aucun résultat pour "${search}"` : 'Aucune annonce disponible'}
             </Typography>
           </Paper>
+        ) : (
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(3,1fr)', lg: 'repeat(4,1fr)', xl: 'repeat(5,1fr)' },
+            gap: 3,
+          }}>
+            {filtered.map(item => (
+              <Card key={item.id} sx={{
+                display: 'flex', flexDirection: 'column', borderRadius: 3, overflow: 'hidden',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.07)',
+                transition: 'all 0.25s ease',
+                '&:hover': { boxShadow: '0 12px 28px rgba(0,0,0,0.15)', transform: 'translateY(-5px)' },
+                bgcolor: 'white',
+              }}>
+
+                {/* Image */}
+                <Box sx={{ position: 'relative', height: 200, bgcolor: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  {item.imageUrl ? (
+                    <CardMedia
+                      component="img"
+                      image={item.imageUrl}
+                      alt={item.title}
+                      sx={{ height: '100%', width: '100%', objectFit: 'contain', p: 1.5, transition: 'transform 0.3s', '&:hover': { transform: 'scale(1.06)' } }}
+                    />
+                  ) : (
+                    <Typography fontSize={56}>📦</Typography>
+                  )}
+                  <Chip
+                    label={item.category}
+                    size="small"
+                    sx={{ position: 'absolute', top: 8, left: 8, bgcolor: 'rgba(255,255,255,0.92)', fontSize: '0.68rem', fontWeight: 600, textTransform: 'capitalize' }}
+                  />
+                </Box>
+
+                {/* Content */}
+                <CardContent sx={{ flexGrow: 1, px: 2, pt: 2, pb: 1 }}>
+                  <Typography
+                    fontWeight={700} fontSize="0.92rem" gutterBottom
+                    sx={{ lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '2.7em' }}
+                  >
+                    {item.title}
+                  </Typography>
+                  <Typography
+                    variant="body2" color="text.secondary"
+                    sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', mb: 1.5, lineHeight: 1.5, minHeight: '3em', fontSize: '0.82rem' }}
+                  >
+                    {item.description}
+                  </Typography>
+                  <Typography variant="h6" fontWeight={800} color="primary.main" fontSize="1.1rem">
+                    {Number(item.price) === 0 ? 'Gratuit' : `${Number(item.price).toFixed(2)} €`}
+                  </Typography>
+                </CardContent>
+
+                <Divider />
+
+                {/* Actions */}
+                <CardActions sx={{ px: 1.5, py: 1, justifyContent: 'space-between' }}>
+                  <Typography variant="caption" color="text.disabled" noWrap sx={{ maxWidth: '50%', fontSize: '0.7rem' }}>
+                    {item.user?.firstName} {item.user?.lastName}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <Tooltip title="Voir les détails">
+                      <IconButton size="small" color="primary" onClick={() => { setSelectedItem(item); setViewOpen(true); }}>
+                        <VisibilityIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Modifier">
+                      <IconButton size="small" sx={{ color: '#ed6c02' }} onClick={() => openEdit(item)}>
+                        <EditIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Supprimer">
+                      <IconButton size="small" color="error" onClick={() => { setSelectedItem(item); setDeleteOpen(true); }}>
+                        <DeleteIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </CardActions>
+              </Card>
+            ))}
+          </Box>
         )}
       </Container>
 
-      {/* MODAL DE MODIFICATION */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-        <DialogTitle>Modifier l'annonce</DialogTitle>
+      {/* ── DIALOG : CRÉER ── */}
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Publier une annonce</DialogTitle>
         <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-            <TextField
-              label="Titre"
-              fullWidth
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              required
-            />
-            <TextField
-              label="Description"
-              fullWidth
-              multiline
-              rows={4}
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              required
-            />
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField
-                label="Prix (€)"
-                type="number"
-                fullWidth
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                required
-                inputProps={{ min: 0, step: 0.01 }}
-              />
-              <FormControl fullWidth required>
-                <InputLabel>Catégorie</InputLabel>
-                <Select
-                  value={formData.category}
-                  label="Catégorie"
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                >
-                  <MenuItem value="Santé">Santé</MenuItem>
-                  <MenuItem value="Bien-être">Bien-être</MenuItem>
-                  <MenuItem value="Matériel">Matériel</MenuItem>
-                  <MenuItem value="Coaching">Coaching</MenuItem>
-                  <MenuItem value="Informatique">Informatique</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-            <TextField
-              label="URL de l'image (optionnel)"
-              fullWidth
-              value={formData.imageUrl}
-              onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-              placeholder="https://example.com/image.jpg"
-              helperText="Collez ici le lien d'une image depuis Google Images ou autre"
-            />
-          </Box>
+          <ItemForm data={form} onChange={(k, v) => setForm(prev => ({ ...prev, [k]: v }))} />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog} color="inherit">
-            Annuler
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setCreateOpen(false)}>Annuler</Button>
+          <Button variant="contained" color="success" onClick={handleCreate} disabled={!form.title || !form.description || !form.category}>
+            Publier
           </Button>
-          <Button
-            onClick={handleUpdateAnnonce}
-            variant="contained"
-            color="primary"
-            disabled={!formData.title || !formData.description || !formData.category}
-          >
+        </DialogActions>
+      </Dialog>
+
+      {/* ── DIALOG : MODIFIER ── */}
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Modifier l'annonce</DialogTitle>
+        <DialogContent>
+          <ItemForm data={form} onChange={(k, v) => setForm(prev => ({ ...prev, [k]: v }))} />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setEditOpen(false)}>Annuler</Button>
+          <Button variant="contained" onClick={handleUpdate} disabled={!form.title || !form.description || !form.category}>
             Enregistrer
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* MODAL DE CRÉATION */}
-      <Dialog open={openCreateDialog} onClose={handleCloseCreateDialog} maxWidth="md" fullWidth>
-        <DialogTitle>Publier une nouvelle annonce</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-            <TextField
-              label="Titre de l'annonce"
-              fullWidth
-              value={newAnnouncement.title}
-              onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
-              required
-            />
-            <TextField
-              label="Description détaillée"
-              fullWidth
-              multiline
-              rows={4}
-              value={newAnnouncement.description}
-              onChange={(e) => setNewAnnouncement({ ...newAnnouncement, description: e.target.value })}
-              required
-            />
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField
-                label="Prix (€)"
-                type="number"
-                fullWidth
-                value={newAnnouncement.price}
-                onChange={(e) => setNewAnnouncement({ ...newAnnouncement, price: parseFloat(e.target.value) || 0 })}
-                required
-                inputProps={{ min: 0, step: 0.01 }}
-              />
-              <FormControl fullWidth required>
-                <InputLabel>Catégorie</InputLabel>
-                <Select
-                  value={newAnnouncement.category}
-                  label="Catégorie"
-                  onChange={(e) => setNewAnnouncement({ ...newAnnouncement, category: e.target.value })}
-                >
-                  <MenuItem value="Santé">Santé</MenuItem>
-                  <MenuItem value="Bien-être">Bien-être</MenuItem>
-                  <MenuItem value="Matériel">Matériel</MenuItem>
-                  <MenuItem value="Coaching">Coaching</MenuItem>
-                  <MenuItem value="Informatique">Informatique</MenuItem>
-                </Select>
-              </FormControl>
+      {/* ── DIALOG : VOIR ── */}
+      <Dialog open={viewOpen} onClose={() => setViewOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, pr: 6 }}>{selectedItem?.title}</DialogTitle>
+        <DialogContent dividers>
+          {selectedItem?.imageUrl && (
+            <Box sx={{ textAlign: 'center', mb: 3, bgcolor: '#fafafa', borderRadius: 2, p: 2 }}>
+              <img src={selectedItem.imageUrl} alt={selectedItem.title} style={{ maxHeight: 260, maxWidth: '100%', objectFit: 'contain' }} />
             </Box>
-            <TextField
-              label="URL de l'image (optionnel)"
-              fullWidth
-              value={newAnnouncement.imageUrl}
-              onChange={(e) => setNewAnnouncement({ ...newAnnouncement, imageUrl: e.target.value })}
-              placeholder="https://example.com/image.jpg"
-              helperText="Lien vers une image externe"
-            />
-          </Box>
+          )}
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Chip label={selectedItem?.category} size="small" color="primary" variant="outlined" sx={{ textTransform: 'capitalize' }} />
+            </Box>
+            <Typography variant="h5" color="primary" fontWeight={800}>
+              {Number(selectedItem?.price) === 0 ? 'Gratuit' : `${Number(selectedItem?.price).toFixed(2)} €`}
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+              {selectedItem?.description}
+            </Typography>
+            <Divider />
+            <Typography variant="body2" color="text.secondary">
+              Proposé par <strong>{selectedItem?.user?.firstName} {selectedItem?.user?.lastName}</strong>
+            </Typography>
+          </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseCreateDialog} color="inherit">
-            Annuler
-          </Button>
-          <Button
-            onClick={handleCreateAnnouncement}
-            variant="contained"
-            color="success"
-            disabled={!newAnnouncement.title || !newAnnouncement.description || !newAnnouncement.category}
-          >
-            Publier
-          </Button>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setViewOpen(false)}>Fermer</Button>
+          <Button variant="contained">Contacter le vendeur</Button>
         </DialogActions>
       </Dialog>
+
+      {/* ── DIALOG : SUPPRIMER ── */}
+      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Confirmer la suppression</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Voulez-vous vraiment supprimer <strong>"{selectedItem?.title}"</strong> ?
+            Cette action est irréversible.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteOpen(false)}>Annuler</Button>
+          <Button variant="contained" color="error" onClick={handleDelete}>Supprimer</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── SNACKBAR ── */}
+      <Snackbar
+        open={snack.open}
+        autoHideDuration={3500}
+        onClose={() => setSnack(s => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={snack.severity} variant="filled" onClose={() => setSnack(s => ({ ...s, open: false }))}>
+          {snack.msg}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
-
-export default Home;

@@ -57,8 +57,8 @@ export default function Navbar() {
                     <Button sx={{ color: 'white', display: 'block' }} onClick={() => alert('Bientôt disponible !')}>
                         Ressources
                     </Button>
-                    <Button sx={{ color: 'white', display: 'block' }} onClick={() => alert('Bientôt disponible !')}>
-                        Événements
+                    <Button sx={{ color: 'white', display: 'block' }} component={Link} to="/calendar">
+                        Agenda
                     </Button>
                 </Box>
 

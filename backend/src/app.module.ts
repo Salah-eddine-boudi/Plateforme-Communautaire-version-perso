@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { AuthModule } from './auth/auth.module';
 import { ChatModule } from './chat/chat.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ChatModule } from './chat/chat.module';
     MarketplaceModule,
     AuthModule,
     ChatModule,
+    EventsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
